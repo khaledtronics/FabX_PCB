@@ -1,132 +1,60 @@
-# FabX — PCB Fabrication & Assembly Machine
+## Controller Board PCB — FABX CNC Controller V1.0
 
-> *"A mini PCB factory that said 'why walk between machines when I can just… not?'"*
+### Overview
 
-FabX is a fully automated PCB fabrication and assembly system developed as a graduation project. It takes a blank copper-clad board through the entire manufacturing pipeline — milling, solder paste dispensing, component placement, and reflow soldering — with no human intervention between steps.
+Off-the-shelf CNC controller boards are designed for general-purpose machines and fall short when a project demands control over a large number of axes and heterogeneous actuators simultaneously. For our hybrid CNC/Pick-and-Place machine, we required control over **10 stepper motors** alongside a diverse set of peripherals — IR optical endstops, a suction pump relay, a hotplate SSR, and a BTS7960-based DC spindle driver — a combination no commercially available board could satisfy.
 
-What typically requires three separate machines, a conveyor, and a lot of floor space has been consolidated into a single, compact dual-function platform.
-
----
-
-## The Problem
-
-A complete PCB manufacturing workflow normally involves:
-
-1. A **CNC router** to mill the copper traces
-2. A **Pick-and-Place machine** to populate the board with components
-3. A **reflow oven or hotplate** to solder everything in place
-
-These are three different machines, three different footprints, and three manual handoff steps. For small-scale or in-house production, this is a significant barrier — in cost, space, and complexity.
-
-**FabX collapses all three stages into one machine.**
+This led us to design a **custom control board from scratch**, built around the STM32F103C8T6 ("Blue Pill") microcontroller.
 
 ---
 
-## The Solution — Dual-Mode, Single Platform
+### Design Philosophy
 
-The core insight driving the mechanical design is that all three tasks are **sequential, never simultaneous**. A PCB being milled isn't being populated. A board being reflowed isn't being routed. This means the same physical space and motion system can serve multiple purposes — you just need to switch modes intelligently.
+Rather than designing two entirely separate boards for the CNC router and the Pick-and-Place machine, we adopted a **unified, modular design strategy**:
 
-### Mechanical Architecture
+- A single PCB layout accommodates the full I/O requirements of **both machines**
+- The board is populated differently per use case — 6 stepper driver slots serve the PnP head, while 4 serve the CNC router
+- This approach leverages the 5-unit minimum of PCB fabrication orders, eliminating waste and reducing unit cost
 
-FabX uses a **dual X-axis design**: two independent tool heads share the same Y and Z infrastructure but operate separately depending on the current stage of fabrication.
-
-| Head | Role | Motion System | Why |
-|---|---|---|---|
-| **Router Head** | Milling copper traces | Lead screws | Rigidity and positional accuracy under cutting load |
-| **PnP Head** | Paste dispensing + component placement | GT2 timing belts | High-speed traversal across the board |
-
-Both heads ride on **MGN12 linear profile rails**, chosen for their rigidity, low friction, and precision — ensuring that neither the router's vibration nor the PnP head's rapid movements compromise positional accuracy.
-
-### Process Flow
-
-```
-[Blank PCB] → Milling (Router Head) → Solder Paste Dispensing (PnP Head) → Component Placement (PnP Head) → Reflow (Hotplate) → [Finished PCB]
-```
-
-All steps occur on the same machine bed, with the Raspberry Pi 5 orchestrating the handoff between modes automatically.
+Both machines share the same hardware design; firmware and connector population differentiate their roles.
 
 ---
 
-## Electronics & Control
+### Key Features
 
-The machine is controlled by a **Raspberry Pi 5** acting as the central coordinator, communicating with two custom-designed controller PCBs — one per machine head.
-
-Each controller board is purpose-built for its role but shares a unified hardware design (see the [Control PCB README](./ControlBoard/README.md) for full details). The shared design allowed both boards to be manufactured from the same Gerber files, keeping fabrication costs down.
-
-### Control Stack Summary
-
-```
-Raspberry Pi 5
-├── CNC Controller PCB  (STM32F103 — 4× A4988 stepper drivers, spindle, SSR, thermistors, endstops)
-└── PnP Controller PCB  (STM32F103 — 6× A4988 stepper drivers, pump relay, PCA9685, endstops)
-```
-
----
-
-## Key Subsystems
-
-### 🔩 CNC Router
-- Mills PCB copper traces directly from Gerber files
-- Lead-screw-driven X axis for rigid, vibration-resistant cutting
-- Controlled via custom controller PCB with A4988 stepper drivers
-- BTS7960 H-bridge for 300W DC spindle motor
-
-### 🦾 Pick-and-Place Head
-- Belt-driven for rapid positioning across the board
-- Vacuum nozzle with suction pump (relay-controlled)
-- Solder paste dispenser integrated into the same head
-- Optical endstops on all axes for homing precision
-
-### 🌡️ Reflow Soldering
-- Hotplate-based reflow controlled via SSR (Solid-State Relay)
-- Three NTC thermistor channels for temperature monitoring
-- Controlled reflow profile managed by the Raspberry Pi
-
----
-
-## Repository Structure
-
-```
-FabX/
-├── ControlBoard/         # Custom PCB controller — schematics, layout, BOM
-├── FabricationFiles/     # STL & DXF files — custom parts with cad added soon
-├── Firmware/             # STM32 firmware for both controller boards
-├── Software/             # Raspberry Pi control software
-└── Docs/                 # Wiring diagrams, calibration guides, build notes (in progress)
-```
-
----
-
-## Project Status
-
-- [x] Mechanical design & assembly
-- [x] Custom controller PCB — designed, fabricated, and validated
-- [x] CNC milling — operational
-- [x] Pick-and-place head — operational
-- [x] Solder paste dispensing — operational
-- [x] Hotplate reflow — operational
-- [ ] Full end-to-end automated pipeline (in progress)
-
----
-
-## Team
-
-Built with a lot of coffee and questionable sleep schedules by:
-
-| Name | Emails |
+| Feature | Details |
 |---|---|
-| Abd El Hameed Nasr | abdelhameednasr3344@gmail.com |
-| Ali Loai | xperia1v72@gmail.com |
-| Kamelia Diaa | Komeiliadiaa@gmail.com |
-| Khaled Nasr | knasrr14@gmail.com |
-| Mohamed El Sabah | .com |
-| Saif El Dein Ayman | saifeldein27@gmail.com |
-| Youssef Tamer | yousseftamerieee@gmail.com |
-
-*Graduation Project — 2025/2026*
+| **Microcontroller** | STM32F103C8T6 (Blue Pill) |
+| **Stepper Drivers** | 6× A4988 sockets (scalable to combined 10-axis use) |
+| **Spindle Driver** | BTS7960 H-Bridge (300W DC motor) |
+| **Pump Control** | Relay-driven output (optoisolated) |
+| **Hotplate Control** | SSR (Solid-State Relay) output |
+| **Endstops** | 6× optical limit switch inputs (X/Y/Z, dual per axis) |
+| **Thermistor Inputs** | 3× NTC thermistor channels (TH_A, TH_B, TH_C) |
+| **Communication** | USB (Full-speed via USB-B), I²C header |
+| **Power** | 12V input → onboard Mini360 buck to 5V → AMS1117 to 3.3V |
+| **Indicators** | Motion LEDs (X/Y/Z), power LEDs (logic/module/stepper), dual buzzers |
 
 ---
 
-## License
+### Known Issue & Workaround — Shared Endstop Pins
 
-This project is open-source. Hardware designs, firmware, and software are released for educational and non-commercial use. See `LICENSE` for details.
+To conserve GPIO pins on the STM32, the left and right limit switches on each axis were initially routed to a **shared signal pin** (e.g., both X-axis endstops on a single input). This caused the sensor outputs to interfere with each other when both were active, as one could back-drive the other.
+
+**Workaround (V1.0):** 1N4148 signal diodes were hand-soldered onto each sensor's signal wire, allowing current to flow only toward the microcontroller and preventing back-driving between sensors.
+
+**Resolution (planned V2.0):** Each limit switch will be assigned a dedicated GPIO pin, eliminating the need for the diode fix entirely.
+
+---
+
+### Hardware Files
+
+| File | Description |
+|---|---|
+| `Dual_Controller_Schematic.pdf` | Full 10-sheet KiCad schematic |
+| `CB_V1.jpeg` | Assembled boards (two units) |
+| `CB_V1_3D.png` | PCB 3D render (top layer) |
+| `CB_V1_TL.png` | PCB layout — top copper layer |
+| `CB_V1_BL.png` | PCB layout — bottom copper layer |
+
+---
